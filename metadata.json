@@ -1,0 +1,5 @@
+{
+  "name": "Multiplayer Tic Tac Toe",
+  "description": "Real-time multiplayer Tic Tac Toe with chat and video calling.",
+  "requestFramePermissions": ["camera", "microphone"]
+}

@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    function isValidString(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+    
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser() {
+      return hasRequiredFields(['displayName', 'email']) &&
+             isValidString('displayName', 1, 100) &&
+             isValidString('email', 3, 200) &&
+             (!('photoURL' in request.resource.data) || isValidString('photoURL', 0, 1000));
+    }
+
+    function isValidRoom() {
+      return hasRequiredFields(['hostId', 'status', 'board', 'currentTurn', 'winner', 'size', 'createdAt']) &&
+             request.resource.data.hostId is string &&
+             request.resource.data.status in ['waiting', 'playing', 'finished', 'abandoned'] &&
+             request.resource.data.board is list &&
+             request.resource.data.board.size() <= 121 && // Max 11x11
+             request.resource.data.currentTurn in ['X', 'O'] &&
+             request.resource.data.winner in ['X', 'O', 'Draw', ''] &&
+             request.resource.data.size is number &&
+             request.resource.data.size >= 3 && request.resource.data.size <= 11 &&
+             request.resource.data.createdAt is timestamp &&
+             (!('guestId' in request.resource.data) || request.resource.data.guestId is string);
+    }
+
+    function isValidMessage() {
+      return hasRequiredFields(['text', 'userId', 'createdAt']) &&
+             isValidString('text', 1, 1000) &&
+             request.resource.data.userId == request.auth.uid &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidSignaling() {
+      return hasRequiredFields(['type', 'sender', 'data', 'createdAt']) &&
+             request.resource.data.type in ['offer', 'answer', 'candidate'] &&
+             request.resource.data.sender == request.auth.uid &&
+             isValidString('data', 1, 10000) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidMatchmaking() {
+      return hasRequiredFields(['status', 'createdAt']) &&
+             request.resource.data.status in ['waiting', 'matched'] &&
+             request.resource.data.createdAt is timestamp &&
+             (!('roomId' in request.resource.data) || request.resource.data.roomId == null || request.resource.data.roomId is string);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser();
+      allow update: if isOwner(userId) && isValidUser();
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidRoom() && request.resource.data.hostId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidRoom() && 
+                    (resource.data.hostId == request.auth.uid || 
+                     (!('guestId' in resource.data) && request.resource.data.guestId == request.auth.uid) ||
+                     ('guestId' in resource.data && resource.data.guestId == request.auth.uid));
+    }
+
+    match /rooms/{roomId}/messages/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidMessage();
+    }
+
+    match /rooms/{roomId}/signaling/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidSignaling();
+    }
+
+    match /matchmaking/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidMatchmaking();
+      allow update: if isAuthenticated() && isValidMatchmaking(); // Allow others to update when matched
+      allow delete: if isOwner(userId) || isAuthenticated(); // Allow others to delete when matched
+    }
+  }
+}

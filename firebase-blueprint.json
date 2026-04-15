@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user profile",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["displayName", "email"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "A Tic Tac Toe game room",
+      "type": "object",
+      "properties": {
+        "hostId": { "type": "string" },
+        "guestId": { "type": "string" },
+        "status": { "type": "string", "enum": ["waiting", "playing", "finished", "abandoned"] },
+        "board": { "type": "array", "items": { "type": "string" } },
+        "currentTurn": { "type": "string", "enum": ["X", "O"] },
+        "winner": { "type": "string", "enum": ["X", "O", "Draw", ""] },
+        "size": { "type": "number" },
+        "createdAt": { "type": "string", "format": "timestamp" }
+      },
+      "required": ["hostId", "status", "board", "currentTurn", "winner", "size", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A chat message in a room",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "timestamp" }
+      },
+      "required": ["text", "userId", "createdAt"]
+    },
+    "Signaling": {
+      "title": "Signaling",
+      "description": "WebRTC signaling data",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["offer", "answer", "candidate"] },
+        "sender": { "type": "string" },
+        "data": { "type": "string" },
+        "createdAt": { "type": "string", "format": "timestamp" }
+      },
+      "required": ["type", "sender", "data", "createdAt"]
+    },
+    "Matchmaking": {
+      "title": "Matchmaking",
+      "description": "A player waiting for a match",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["waiting", "matched"] },
+        "roomId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "timestamp" }
+      },
+      "required": ["status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Game rooms"
+    },
+    "/rooms/{roomId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Chat messages for a room"
+    },
+    "/rooms/{roomId}/signaling/{docId}": {
+      "schema": { "$ref": "#/entities/Signaling" },
+      "description": "WebRTC signaling for a room"
+    },
+    "/matchmaking/{userId}": {
+      "schema": { "$ref": "#/entities/Matchmaking" },
+      "description": "Players waiting for a match"
+    }
+  }
+}
