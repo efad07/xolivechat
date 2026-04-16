@@ -97,7 +97,7 @@ export default function GameRoom() {
     if (!isIdle) return;
     
     const q = query(
-      collection(db, 'users'),
+      collection(db, 'players'),
       orderBy('totalWins', 'desc'),
       limit(20)
     );
@@ -309,7 +309,7 @@ export default function GameRoom() {
       const isDraw = activeRoom.winner === 'Draw';
       const isLoss = !isWin && !isDraw;
 
-      const userRef = doc(db, 'users', user.uid);
+      const userRef = doc(db, 'players', user.uid);
       setDoc(userRef, {
         totalGames: increment(1),
         totalWins: increment(isWin ? 1 : 0),

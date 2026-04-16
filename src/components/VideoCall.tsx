@@ -169,11 +169,13 @@ export default function VideoCall({ roomId, isHost }: VideoCallProps) {
 
     // Clean up signaling collection
     try {
-      const signalingRef = collection(db, `rooms/${roomId}/signaling`);
-      const snapshot = await getDocs(signalingRef);
-      snapshot.forEach(async (d) => {
-        await deleteDoc(doc(db, `rooms/${roomId}/signaling`, d.id));
-      });
+      if (user) {
+        const signalingRef = collection(db, `rooms/${roomId}/signaling`);
+        const snapshot = await getDocs(signalingRef);
+        snapshot.forEach(async (d) => {
+          await deleteDoc(doc(db, `rooms/${roomId}/signaling`, d.id));
+        });
+      }
     } catch (error) {
       console.error('Error cleaning up signaling', error);
     }

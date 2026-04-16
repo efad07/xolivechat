@@ -26,7 +26,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(customUser);
         
         try {
-          const userRef = doc(db, 'users', currentUser.uid);
+          const userRef = doc(db, 'players', currentUser.uid);
           const userSnap = await getDoc(userRef);
           if (!userSnap.exists()) {
             await setDoc(userRef, {
@@ -43,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
         } catch (error) {
-          handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.uid}`);
+          handleFirestoreError(error, OperationType.WRITE, `players/${currentUser.uid}`);
         }
       } else {
         setUser(null);

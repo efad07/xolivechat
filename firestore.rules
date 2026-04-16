@@ -71,19 +71,16 @@ service cloud.firestore {
     // ===============================================================
     // Rules
     // ===============================================================
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isOwner(userId) && isValidUser();
-      allow update: if isOwner(userId) && isValidUser();
+    
+    // Players collection (leaderboard)
+    match /players/{userId} {
+      allow read: if true; // anyone can view leaderboard
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Game rooms / matchmaking
     match /rooms/{roomId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidRoom() && request.resource.data.hostId == request.auth.uid;
-      allow update: if isAuthenticated() && isValidRoom() && 
-                    (resource.data.hostId == request.auth.uid || 
-                     (!('guestId' in resource.data) && request.resource.data.guestId == request.auth.uid) ||
-                     ('guestId' in resource.data && resource.data.guestId == request.auth.uid));
+      allow read, write: if request.auth != null;
     }
 
     match /rooms/{roomId}/messages/{messageId} {
@@ -91,9 +88,10 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidMessage();
     }
 
+    // Signaling (WebRTC / connection cleanup)
     match /rooms/{roomId}/signaling/{docId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidSignaling();
+      allow read, write: if request.auth != null;
+      allow delete: if request.auth != null;
     }
 
     match /matchmaking/{userId} {
@@ -101,6 +99,11 @@ service cloud.firestore {
       allow create: if isOwner(userId) && isValidMatchmaking();
       allow update: if isAuthenticated() && isValidMatchmaking(); // Allow others to update when matched
       allow delete: if isOwner(userId) || isAuthenticated(); // Allow others to delete when matched
+    }
+    
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
