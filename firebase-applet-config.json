@@ -1,10 +1,11 @@
 {
-  "projectId": "affilispace-73b1b",
-  "appId": "1:820636435596:web:7c11efcbcb74869e3be7a9",
-  "apiKey": "AIzaSyDIdJBcCK1T0k2h3WpAsper9Wjw-YnR33Q",
-  "authDomain": "affilispace-73b1b.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-d1db5386-497e-4ac7-9682-aa5110c1f378",
-  "storageBucket": "affilispace-73b1b.firebasestorage.app",
-  "messagingSenderId": "820636435596",
-  "measurementId": ""
+  "projectId": "xolivechat",
+  "appId": "1:889508561814:web:360dfccfd48cbbf69d13b7",
+  "apiKey": "AIzaSyB6mPgliDo_MPL9Ha0Nkg_kyXJlDB-ZUYM",
+  "authDomain": "xolivechat.firebaseapp.com",
+  "databaseURL": "https://xolivechat-default-rtdb.asia-southeast1.firebasedatabase.app",
+  "storageBucket": "xolivechat.firebasestorage.app",
+  "messagingSenderId": "889508561814",
+  "measurementId": "G-NZNWPJVNXM",
+  "firestoreDatabaseId": "(default)"
 }

@@ -1,9 +1,15 @@
 import React from 'react';
+import { Helmet } from 'react-helmet-async';
 import { Mail, MessageSquare } from 'lucide-react';
 
 export default function Contact() {
   return (
     <div className="max-w-4xl mx-auto p-8 text-slate-300">
+      <Helmet>
+        <title>Contact Us | XoliveChat</title>
+        <meta name="description" content="Contact XoliveChat for support, feedback, or any issues related to the Tic Tac Toe multiplayer game." />
+        <link rel="canonical" href="https://xolivechat.com/contact" />
+      </Helmet>
       <h1 className="text-4xl font-bold text-cyan-400 mb-6">Contact Us</h1>
       <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-xl">
         <p className="text-lg mb-8">

@@ -28,14 +28,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const userRef = doc(db, 'players', currentUser.uid);
           const userSnap = await getDoc(userRef);
+          
           if (!userSnap.exists()) {
             await setDoc(userRef, {
-              displayName: currentUser.displayName || 'Anonymous',
+              name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Anonymous',
               email: currentUser.email || '',
               photoURL: currentUser.photoURL || '',
+              totalWins: 0,
+              totalLosses: 0,
+              totalDraws: 0,
+              totalGames: 0,
               isPremium: false
             });
           } else {
+            // Update profile info using merge: true to prevent overwriting stats
+            await setDoc(userRef, {
+              name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Anonymous',
+              email: currentUser.email || '',
+              photoURL: currentUser.photoURL || '',
+            }, { merge: true });
+            
             const data = userSnap.data();
             if (data.isPremium) {
               customUser.isPremium = true;

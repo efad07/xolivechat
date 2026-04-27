@@ -3,13 +3,44 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Play Tic Tac Toe Online | Multiplayer & Video Chat</title>
-    <meta name="description" content="Play Tic Tac Toe online with friends in real-time. Features live chat, video calling, and multiplayer game rooms. Free to play!" />
-    <meta name="keywords" content="tic tac toe online, multiplayer tic tac toe, play tic tac toe with friends, real-time game, video chat game" />
-    <meta property="og:title" content="Play Tic Tac Toe Online | Multiplayer & Video Chat" />
-    <meta property="og:description" content="Play Tic Tac Toe online with friends in real-time. Features live chat, video calling, and multiplayer game rooms." />
-    <meta property="og:type" content="website" />
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
+    <title>Play Tic Tac Toe Online | Chat, Video Call & Multiplayer | XoliveChat</title>
+    <meta name="description" content="Play Tic Tac Toe online with real players. Chat, video call, and compete globally on XoliveChat." />
+    <meta name="keywords" content="tic tac toe online, multiplayer tic tac toe, play with friends, online game chat" />
     
+    <link rel="canonical" href="https://xolivechat.com" />
+    
+    <meta property="og:title" content="Play Tic Tac Toe Online | Chat, Video Call & Multiplayer | XoliveChat" />
+    <meta property="og:description" content="Play Tic Tac Toe online with real players. Chat, video call, and compete globally on XoliveChat." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://xolivechat.com" />
+    
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "url": "https://xolivechat.com/",
+      "name": "XoliveChat",
+      "description": "Play Tic Tac Toe online with real players. Chat, video call, and compete globally on XoliveChat."
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "VideoGame",
+      "name": "Tic Tac Toe Multiplayer",
+      "url": "https://xolivechat.com/",
+      "author": {
+        "@type": "Organization",
+        "name": "XoliveChat"
+      },
+      "genre": "Board Game",
+      "playMode": "MultiPlayer",
+      "applicationCategory": "Game"
+    }
+    </script>
+
     <!-- Google Analytics (GA4) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=%VITE_GA_MEASUREMENT_ID%"></script>
     <script>
@@ -18,13 +49,135 @@
       gtag('js', new Date());
       gtag('config', '%VITE_GA_MEASUREMENT_ID%');
     </script>
-
-    <!-- Google AdSense -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=%VITE_ADSENSE_PUBLISHER_ID%" crossorigin="anonymous"></script>
   </head>
   <body class="bg-slate-950 text-slate-100">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <script type="module">
+      import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+      import { 
+        getAuth, 
+        createUserWithEmailAndPassword, 
+        signInWithEmailAndPassword, 
+        signOut, 
+        onAuthStateChanged 
+      } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+      import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyB6mPgliDo_MPL9Ha0Nkg_kyXJlDB-ZUYM",
+        authDomain: "xolivechat.firebaseapp.com",
+        databaseURL: "https://xolivechat-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "xolivechat",
+        storageBucket: "xolivechat.firebasestorage.app",
+        messagingSenderId: "889508561814",
+        appId: "1:889508561814:web:360dfccfd48cbbf69d13b7",
+        measurementId: "G-NZNWPJVNXM"
+      };
+
+      // SAFE INIT (prevents crash)
+      let app;
+      try {
+        app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+      } catch (error) {
+        console.error("Firebase initialization error:", error);
+      }
+
+      const auth = app ? getAuth(app) : getAuth();
+      const db = app ? getFirestore(app) : getFirestore();
+
+      //----------------------------------
+      // SIGN UP FUNCTION
+      //----------------------------------
+      async function signUp(email, password) {
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          const user = userCredential.user;
+
+          await setDoc(doc(db, "players", user.uid), {
+            email: user.email,
+            name: user.email.split('@')[0], // fallback name
+            photoURL: '',
+            totalWins: 0,
+            totalLosses: 0,
+            totalDraws: 0,
+            totalGames: 0,
+            createdAt: Date.now()
+          }, { merge: true });
+
+          console.log("Signup success:", user);
+        } catch (error) {
+          console.error("Signup error:", error.code, error.message);
+        }
+      }
+
+      //----------------------------------
+      // LOGIN FUNCTION
+      //----------------------------------
+      async function login(email, password) {
+        try {
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          const user = userCredential.user;
+
+          console.log("Login success:", user);
+        } catch (error) {
+          console.error("Login error:", error.code, error.message);
+        }
+      }
+
+      //----------------------------------
+      // LOGOUT FUNCTION
+      //----------------------------------
+      async function logout() {
+        try {
+          await signOut(auth);
+        } catch (error) {
+          console.error("Logout error:", error);
+        }
+      }
+
+      //----------------------------------
+      // AUTH STATE LISTENER
+      //----------------------------------
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          console.log("Logged in user:", user.email);
+        } else {
+          console.log("No user logged in");
+        }
+      });
+
+      //----------------------------------
+      // WRAPPER FUNCTIONS
+      //----------------------------------
+      function handleSignup() {
+        const emailEl = document.getElementById("email");
+        const passwordEl = document.getElementById("password");
+        if(emailEl && passwordEl) {
+          signUp(emailEl.value, passwordEl.value);
+        }
+      }
+
+      function handleLogin() {
+        const emailEl = document.getElementById("email");
+        const passwordEl = document.getElementById("password");
+        if(emailEl && passwordEl) {
+          login(emailEl.value, passwordEl.value);
+        }
+      }
+
+      //----------------------------------
+      // GLOBAL ACCESS
+      //----------------------------------
+      window.signUp = signUp;
+      window.login = login;
+      window.handleSignup = handleSignup;
+      window.handleLogin = handleLogin;
+      window.logout = logout;
+      window.db = db;
+
+    </script>
   </body>
 </html>
 

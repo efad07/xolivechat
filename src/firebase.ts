@@ -1,18 +1,63 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+import { getAnalytics, isSupported } from 'firebase/analytics';
+const firebaseConfig = {
+  apiKey: "AIzaSyB6mPgliDo_MPL9Ha0Nkg_kyXJlDB-ZUYM",
+  authDomain: "xolivechat.firebaseapp.com",
+  databaseURL: "https://xolivechat-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "xolivechat",
+  storageBucket: "xolivechat.firebasestorage.app",
+  messagingSenderId: "889508561814",
+  appId: "1:889508561814:web:360dfccfd48cbbf69d13b7",
+  measurementId: "G-NZNWPJVNXM",
+  firestoreDatabaseId: "(default)"
+};
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+let app: any;
+try {
+  app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+} catch (error) {
+  console.error("Firebase initialization error:", error);
+}
 
-export const signInWithGoogle = async () => {
-  const provider = new GoogleAuthProvider();
+// Analytics safe
+try {
+  if (app) {
+    isSupported().then((yes) => {
+      if (yes) getAnalytics(app);
+    }).catch(() => {});
+  }
+} catch (e) {}
+
+export const auth = app ? getAuth(app) : getAuth();
+export const db = app ? getFirestore(app, firebaseConfig.firestoreDatabaseId) : getFirestore();
+import { getDatabase } from 'firebase/database';
+export const rtdb = app ? getDatabase(app) : getDatabase();
+
+export const signUp = async (email: string, password: string) => {
   try {
-    await signInWithPopup(auth, provider);
-  } catch (error) {
-    console.error('Error signing in with Google', error);
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    console.log("Signup success:", userCredential.user);
+    return userCredential;
+  } catch (error: any) {
+    console.error("Signup error:", error.code, error.message);
+  }
+};
+
+export const login = async (email: string, password: string) => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    console.log("Login success:", userCredential.user);
+    return userCredential;
+  } catch (error: any) {
+    console.error("Login error:", error.code, error.message);
   }
 };
 
@@ -20,9 +65,23 @@ export const logOut = async () => {
   try {
     await signOut(auth);
   } catch (error) {
-    console.error('Error signing out', error);
+    console.error('Logout error:', error);
   }
 };
+
+// GLOBAL ACCESS (IMPORTANT)
+(window as any).signUp = signUp;
+(window as any).login = login;
+(window as any).logout = logOut;
+(window as any).db = db;
+
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    console.log("Logged in user:", user.email);
+  } else {
+    console.log("No user logged in");
+  }
+});
 
 export enum OperationType {
   CREATE = 'create',

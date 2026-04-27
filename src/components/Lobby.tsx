@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType, signInWithGoogle, logOut } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from './AuthContext';
 import { LogIn, LogOut, Plus, Users } from 'lucide-react';
 import { motion } from 'motion/react';
+import { signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { auth } from '../firebase';
 
 export default function Lobby() {
   const { user, loading } = useAuth();
@@ -53,6 +55,23 @@ export default function Lobby() {
     e.preventDefault();
     if (joinId.trim()) {
       navigate(`/room/${joinId.trim()}`);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const logOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error(e);
     }
   };
 

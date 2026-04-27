@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /room/
 
-Sitemap: https://my-applet-url.run.app/sitemap.xml
+Sitemap: https://xolivechat.com/sitemap.xml

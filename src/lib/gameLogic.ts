@@ -1,7 +1,5 @@
 export function getWinLength(size: number) {
-  if (size === 3) return 3;
-  if (size === 6) return 4;
-  return 5;
+  return size; // 3x3 -> 3, 4x4 -> 4, 5x5 -> 5
 }
 
 export function checkWin(board: string[], size: number, winLength: number) {
@@ -88,9 +86,61 @@ export function checkWin(board: string[], size: number, winLength: number) {
   return null;
 }
 
+function minimax(board: string[], depth: number, isMaximizing: boolean, aiPlayer: string, humanPlayer: string): number {
+  const result = checkWin(board, 3, 3);
+  
+  if (result?.player === aiPlayer) return 10 - depth;
+  if (result?.player === humanPlayer) return depth - 10;
+  if (result?.player === 'Draw') return 0;
+
+  if (isMaximizing) {
+    let best = -Infinity;
+    for (let i = 0; i < board.length; i++) {
+      if (board[i] === '') {
+        board[i] = aiPlayer;
+        let score = minimax(board, depth + 1, false, aiPlayer, humanPlayer);
+        board[i] = '';
+        best = Math.max(best, score);
+      }
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (let i = 0; i < board.length; i++) {
+      if (board[i] === '') {
+        board[i] = humanPlayer;
+        let score = minimax(board, depth + 1, true, aiPlayer, humanPlayer);
+        board[i] = '';
+        best = Math.min(best, score);
+      }
+    }
+    return best;
+  }
+}
+
 export function findBestMove(board: string[], size: number, winLength: number, aiPlayer: string) {
   const humanPlayer = aiPlayer === 'X' ? 'O' : 'X';
 
+  if (size === 3) {
+    let bestScore = -Infinity;
+    let move = -1;
+
+    for (let i = 0; i < board.length; i++) {
+      if (board[i] === '') {
+        board[i] = aiPlayer;
+        let score = minimax(board, 0, false, aiPlayer, humanPlayer);
+        board[i] = '';
+
+        if (score > bestScore) {
+          bestScore = score;
+          move = i;
+        }
+      }
+    }
+    return move !== -1 ? move : board.findIndex((c) => c === '');
+  }
+
+  // Fallback for larger boards
   // 1. Try to win
   for (let i = 0; i < board.length; i++) {
     if (board[i] === '') {
@@ -113,7 +163,7 @@ export function findBestMove(board: string[], size: number, winLength: number, a
     }
   }
 
-  // 3. Try to build a line (heuristic)
+  // 3. Fallback to random move for larger boards
   const emptyCells = board.map((c, i) => c === '' ? i : -1).filter(i => i !== -1);
   if (emptyCells.length === 0) return -1;
 

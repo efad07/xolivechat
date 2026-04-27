@@ -1,8 +1,14 @@
 import React from 'react';
+import { Helmet } from 'react-helmet-async';
 
 export default function Terms() {
   return (
     <div className="max-w-4xl mx-auto p-8 text-slate-300">
+      <Helmet>
+        <title>Terms & Conditions | XoliveChat</title>
+        <meta name="description" content="Terms & Conditions for XoliveChat. Read the rules and guidelines for using our platform." />
+        <link rel="canonical" href="https://xolivechat.com/terms" />
+      </Helmet>
       <h1 className="text-4xl font-bold text-cyan-400 mb-6">Terms & Conditions</h1>
       <div className="space-y-6 text-lg leading-relaxed">
         <p>

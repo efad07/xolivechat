@@ -1,8 +1,14 @@
 import React from 'react';
+import { Helmet } from 'react-helmet-async';
 
 export default function Privacy() {
   return (
     <div className="max-w-4xl mx-auto p-8 text-slate-300">
+      <Helmet>
+        <title>Privacy Policy | XoliveChat</title>
+        <meta name="description" content="Privacy Policy for XoliveChat. Learn how we handle your data, gameplay info, and authentication securely." />
+        <link rel="canonical" href="https://xolivechat.com/privacy" />
+      </Helmet>
       <h1 className="text-4xl font-bold text-cyan-400 mb-6">Privacy Policy</h1>
       <div className="space-y-6 text-lg leading-relaxed">
         <p>

@@ -1,253 +1,268 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { collection, addDoc, onSnapshot, query, doc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import Peer, { MediaConnection } from 'peerjs';
 import { useAuth } from './AuthContext';
-import { Video, VideoOff, Mic, MicOff, PhoneOff, Phone } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, PhoneCall, PhoneOff } from 'lucide-react';
 
 interface VideoCallProps {
   roomId: string;
   isHost: boolean;
+  mode?: string;
+  onPeerReady?: (id: string) => void;
+  targetPeerId?: string | null;
+  isFullScreen?: boolean;
 }
 
-const configuration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
-  ]
-};
-
-export default function VideoCall({ roomId, isHost }: VideoCallProps) {
+export default function VideoCall({ roomId, isHost, mode = 'random', onPeerReady, targetPeerId, isFullScreen }: VideoCallProps) {
   const { user } = useAuth();
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [peerId, setPeerId] = useState('');
   const [inCall, setInCall] = useState(false);
-  const [videoEnabled, setVideoEnabled] = useState(true);
-  const [audioEnabled, setAudioEnabled] = useState(true);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isCameraOff, setIsCameraOff] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const isLobby = roomId === 'default-room';
 
+  const localVideo = useRef<HTMLVideoElement>(null);
+  const remoteVideo = useRef<HTMLVideoElement>(null);
+
+  const peerRef = useRef<Peer | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const callRef = useRef<MediaConnection | null>(null);
+
   useEffect(() => {
+    if (!user) return; // Only init peer if logged in
+
+    const peer = new Peer();
+    peerRef.current = peer;
+
+    peer.on('open', (id) => {
+      setPeerId(id);
+      setErrorMsg('');
+      if (onPeerReady) onPeerReady(id);
+    });
+
+    peer.on('error', (err) => {
+      console.error('Peer error:', err);
+      setErrorMsg(err.message || 'Connection error occurred.');
+    });
+
+    peer.on('call', async (call) => {
+      try {
+        if (inCall) {
+          console.warn('Already in a call');
+          return;
+        }
+
+        const stream = await getStream();
+        if (!stream) return;
+
+        callRef.current = call;
+        call.answer(stream);
+        setInCall(true);
+
+        call.on('stream', (remoteStream) => {
+          if (remoteVideo.current) remoteVideo.current.srcObject = remoteStream;
+        });
+
+        call.on('close', handleEndCall);
+      } catch (err) {
+        console.error('Incoming call error:', err);
+      }
+    });
+
     return () => {
-      endCall();
+      if (callRef.current) callRef.current.close();
+      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      peer.destroy();
     };
-  }, [roomId]);
+  }, [user]);
 
-  const toggleVideo = () => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach(track => {
-        track.enabled = !videoEnabled;
-      });
-      setVideoEnabled(!videoEnabled);
+  // Start local video unconditionally if isFullScreen
+  useEffect(() => {
+    if (isFullScreen) {
+      getStream();
     }
-  };
+  }, [isFullScreen]);
 
-  const toggleAudio = () => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach(track => {
-        track.enabled = !audioEnabled;
-      });
-      setAudioEnabled(!audioEnabled);
+  // Connect when target is provided
+  useEffect(() => {
+    if (targetPeerId && targetPeerId !== peerId && !inCall && !isLobby) {
+      connectToPeer(targetPeerId);
     }
-  };
+  }, [targetPeerId, peerId, isLobby]);
 
-  const startCall = async () => {
-    if (!user || isLobby) return;
+  const getStream = async () => {
+    if (streamRef.current) return streamRef.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      setLocalStream(stream);
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-
-      const pc = new RTCPeerConnection(configuration);
-      peerConnectionRef.current = pc;
-
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-
-      pc.ontrack = (event) => {
-        setRemoteStream(event.streams[0]);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        }
-      };
-
-      const signalingRef = collection(db, `rooms/${roomId}/signaling`);
-
-      pc.onicecandidate = async (event) => {
-        if (event.candidate) {
-          try {
-            await addDoc(signalingRef, {
-              type: 'candidate',
-              sender: user.uid,
-              data: JSON.stringify(event.candidate.toJSON()),
-              createdAt: new Date().toISOString()
-            });
-          } catch (error) {
-            console.error('Error adding candidate', error);
-          }
-        }
-      };
-
-      if (isHost) {
-        // Host creates offer
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        await addDoc(signalingRef, {
-          type: 'offer',
-          sender: user.uid,
-          data: JSON.stringify({ type: offer.type, sdp: offer.sdp }),
-          createdAt: new Date().toISOString()
-        });
-      }
-
-      // Listen for signaling data
-      const unsubscribe = onSnapshot(query(signalingRef), async (snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
-          if (change.type === 'added') {
-            const data = change.doc.data();
-            if (data.sender === user.uid) return; // Ignore our own messages
-
-            try {
-              if (data.type === 'offer' && !isHost) {
-                const offer = JSON.parse(data.data);
-                await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                await addDoc(signalingRef, {
-                  type: 'answer',
-                  sender: user.uid,
-                  data: JSON.stringify({ type: answer.type, sdp: answer.sdp }),
-                  createdAt: new Date().toISOString()
-                });
-              } else if (data.type === 'answer' && isHost) {
-                const answer = JSON.parse(data.data);
-                if (pc.signalingState !== 'stable') {
-                  await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                }
-              } else if (data.type === 'candidate') {
-                const candidate = JSON.parse(data.data);
-                await pc.addIceCandidate(new RTCIceCandidate(candidate));
-              }
-            } catch (error) {
-              console.error('Error handling signaling data', error);
-            }
-          }
-        });
-      }, (error) => {
-        console.error('Signaling error', error);
-      });
-
-      setInCall(true);
-
-      // Store unsubscribe to clean up later if needed
-      (pc as any).unsubscribeSignaling = unsubscribe;
-
-    } catch (error) {
-      console.error('Error starting call', error);
+      streamRef.current = stream;
+      if (localVideo.current) localVideo.current.srcObject = stream;
+      return stream;
+    } catch (err) {
+      console.error('User media error:', err);
+      setErrorMsg('Permission denied for camera/microphone.');
+      return null;
     }
   };
 
-  const endCall = async () => {
-    if (peerConnectionRef.current) {
-      if ((peerConnectionRef.current as any).unsubscribeSignaling) {
-        (peerConnectionRef.current as any).unsubscribeSignaling();
-      }
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-      setLocalStream(null);
-    }
-    setRemoteStream(null);
-    setInCall(false);
+  const connectToPeer = async (targetId: string) => {
+    if (!peerRef.current) return;
+    if (inCall) return;
 
-    // Clean up signaling collection
     try {
-      if (user) {
-        const signalingRef = collection(db, `rooms/${roomId}/signaling`);
-        const snapshot = await getDocs(signalingRef);
-        snapshot.forEach(async (d) => {
-          await deleteDoc(doc(db, `rooms/${roomId}/signaling`, d.id));
-        });
+      const stream = await getStream();
+      if (!stream) return;
+
+      const call = peerRef.current.call(targetId, stream);
+      if (!call) return;
+      
+      callRef.current = call;
+      setInCall(true);
+
+      call.on('stream', (remoteStream) => {
+        if (remoteVideo.current) remoteVideo.current.srcObject = remoteStream;
+      });
+
+      call.on('close', handleEndCall);
+      call.on('error', (err) => {
+        console.error('Call error:', err);
+        handleEndCall();
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleEndCall = () => {
+    if (callRef.current) {
+      callRef.current.close();
+      callRef.current = null;
+    }
+    
+    // In full screen lobby mode, don't kill the local stream immediately so we keep preview
+    if (!isFullScreen) {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
       }
-    } catch (error) {
-      console.error('Error cleaning up signaling', error);
+      if (localVideo.current) localVideo.current.srcObject = null;
+    }
+    if (remoteVideo.current) remoteVideo.current.srcObject = null;
+
+    setInCall(false);
+    if (!isFullScreen) {
+       setIsMuted(false);
+       setIsCameraOff(false);
+    }
+  };
+
+  const toggleMute = () => {
+    if (!streamRef.current) return;
+    const audio = streamRef.current.getAudioTracks()[0];
+    if (audio) {
+      audio.enabled = !audio.enabled;
+      setIsMuted(!audio.enabled);
+    }
+  };
+
+  const toggleCamera = () => {
+    if (!streamRef.current) return;
+    const video = streamRef.current.getVideoTracks()[0];
+    if (video) {
+      video.enabled = !video.enabled;
+      setIsCameraOff(!video.enabled);
     }
   };
 
   return (
-    <div className="bg-slate-900 rounded-3xl overflow-hidden shadow-xl">
-      <div className="relative aspect-video bg-black">
-        {/* Remote Video */}
-        {remoteStream ? (
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-500">
-            {isLobby ? 'Join a room to use video call' : (!user ? 'Sign in to use video call' : (inCall ? 'Waiting for other player...' : 'Video Call'))}
-          </div>
-        )}
+    <div className={`bg-slate-900 overflow-hidden shadow-xl flex flex-col items-center justify-center relative ${isFullScreen ? 'w-full h-full rounded-none border-none' : 'w-full min-h-[300px] mt-4 h-[350px] rounded-3xl border border-slate-800'}`}>
+      {isLobby && !isFullScreen ? (
+        <div className="flex flex-col items-center justify-center text-slate-500 h-full p-6 text-center">
+          <VideoOff size={32} className="opacity-50 mb-2" />
+          <p className="font-medium text-slate-400">Join a room to enable video calls</p>
+        </div>
+      ) : !user && !isFullScreen ? (
+        <p className="text-slate-500">Sign in to use video call</p>
+      ) : (
+        <div className="w-full h-full relative overflow-hidden flex">
+           {/* LOCAL VIDEO OUTSIDE FULL SCREEN IF IN CALL, OR FULL SCREEN IF WAITING */}
+           <div className={`transition-all duration-300 ${inCall ? (isFullScreen ? 'absolute top-4 left-4 w-32 h-44 md:w-48 md:h-64 z-20 rounded-2xl overflow-hidden border-4 border-slate-700 shadow-2xl' : 'absolute top-4 left-4 w-24 h-32 z-20 rounded-xl overflow-hidden border-2 border-slate-700 shadow-xl') : "w-full h-full relative"}`}>
+              <video 
+                ref={localVideo} 
+                autoPlay 
+                muted 
+                playsInline 
+                className={`w-full h-full object-cover bg-black ${isCameraOff ? "opacity-0" : "opacity-100"}`} 
+              />
+              {(!inCall || isCameraOff) && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 z-10">
+                   {!inCall ? (
+                     <>
+                     {isFullScreen ? (
+                        null
+                     ) : (
+                       <>
+                        <Video className="w-12 h-12 text-slate-600 mb-2 animate-pulse" />
+                        <p className="text-slate-400 text-sm font-medium px-4 text-center">Waiting for opponent to connect...</p>
+                        {peerId && <p className="text-xs text-slate-600 mt-2 font-mono">My ID: {peerId}</p>}
+                       </>
+                     )}
+                     </>
+                   ) : (
+                     <VideoOff className="w-8 h-8 text-slate-500" />
+                   )}
+                </div>
+              )}
+           </div>
 
-        {/* Local Video (PiP) */}
-        {localStream && (
-          <div className="absolute bottom-4 right-4 w-1/3 max-w-[120px] aspect-video bg-slate-800 rounded-xl overflow-hidden border-2 border-slate-700 shadow-lg">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
-      </div>
+           {/* REMOTE VIDEO */}
+           {inCall && (
+            <div className={`w-full h-full bg-black relative top-0 left-0 ${isFullScreen ? 'absolute inset-0' : ''}`}>
+               <video 
+                 ref={remoteVideo} 
+                 autoPlay 
+                 playsInline 
+                 className="w-full h-full object-cover" 
+               />
+               <div className="absolute top-4 right-4 bg-black/60 backdrop-blur px-3 py-1 text-xs font-bold rounded-full text-blue-300 z-10">
+                  Remote Peer
+               </div>
 
-      {/* Controls */}
-      <div className="p-4 flex justify-center gap-4 bg-slate-800">
-        {isLobby ? (
-          <div className="text-slate-400 text-sm">Video calling disabled in lobby</div>
-        ) : !user ? (
-          <div className="text-slate-400 text-sm">Video calling requires sign in</div>
-        ) : !inCall ? (
-          <button
-            onClick={startCall}
-            className="flex items-center gap-2 px-6 py-2.5 bg-emerald-500 text-white rounded-full font-semibold hover:bg-emerald-600 transition-colors"
-          >
-            <Phone size={18} /> Start Call
-          </button>
-        ) : (
-          <>
-            <button
-              onClick={toggleAudio}
-              className={`p-3 rounded-full transition-colors ${audioEnabled ? 'bg-slate-600 text-white hover:bg-slate-500' : 'bg-red-500 text-white hover:bg-red-600'}`}
-            >
-              {audioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
-            </button>
-            <button
-              onClick={toggleVideo}
-              className={`p-3 rounded-full transition-colors ${videoEnabled ? 'bg-slate-600 text-white hover:bg-slate-500' : 'bg-red-500 text-white hover:bg-red-600'}`}
-            >
-              {videoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
-            </button>
-            <button
-              onClick={endCall}
-              className="p-3 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-            >
-              <PhoneOff size={20} />
-            </button>
-          </>
-        )}
-      </div>
+               {/* CONTROLS OVERLAY - Rendered unconditionally below if full screen */}
+            </div>
+           )}
+           
+           {(inCall || isFullScreen) && (
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3 bg-slate-800/90 backdrop-blur-md p-3 rounded-full border border-slate-700 shadow-2xl z-50">
+                  <button 
+                    onClick={toggleMute}
+                    className={`p-3 rounded-full transition-colors flex items-center justify-center outline-none ${isMuted ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+                    title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
+                  >
+                    {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </button>
+
+                  <button 
+                    onClick={toggleCamera}
+                    className={`p-3 rounded-full transition-colors flex items-center justify-center outline-none ${isCameraOff ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+                    title={isCameraOff ? "Turn On Camera" : "Turn Off Camera"}
+                  >
+                    {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+                  </button>
+
+                  {inCall && (
+                    <button 
+                      onClick={handleEndCall} 
+                      className="p-3 bg-red-600 hover:bg-red-500 text-white rounded-full ml-1 shadow-lg shadow-red-900/50 transition-colors flex items-center justify-center outline-none"
+                      title="End Call"
+                    >
+                      <PhoneOff className="w-5 h-5" />
+                    </button>
+                  )}
+              </div>
+           )}
+        </div>
+      )}
     </div>
   );
 }
